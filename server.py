@@ -1,8 +1,14 @@
-from flask import Flask
-from flask import request
+from flask import Flask, request, jsonify
 import json
 import uuid
 import csv
+
+import sys
+import os
+myDir = os.getcwd()
+sys.path.append(myDir)
+
+import websocket.websocket_functions as websocket_functions
 
 app = Flask(__name__)
 
@@ -40,9 +46,17 @@ def publish():
 
         # instantiate web socket connection
 
-        return {
+        for i in list(range(8765, 8775)):
+            if not websocket_functions.is_port_in_use(i):
+                try:
+                    websocket_functions.start_stream(i)
+                    break
+                except Exception as e:
+                    print(e)
+
+        return jsonify({
           "uuid": my_uuid,
           "url": "dummy-url"
-        }
+        })
     else:
         return 'Content-Type not supported!'
