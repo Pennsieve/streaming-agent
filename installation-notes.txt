@@ -2,5 +2,5 @@ Activate virtual environment:
 $ . venv/bin/activate
 
 To install packages:
-xyzxyz:streaming-agent jasperhuang $ ./venv/bin/python3 -m install ...
+xyzxyz:streaming-agent jasperhuang $ ./venv/bin/python3 -m pip install ...
 
