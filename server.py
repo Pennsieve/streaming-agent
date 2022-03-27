@@ -25,9 +25,14 @@ def hello_world():
 # 
 @app.route('/publish', methods=['POST'])
 def publish():
+    app.logger.info(request)
     content_type = request.headers.get('Content-Type')
     if (content_type == 'application/json'):
-        req_dict = json.loads(request.json)
+        print("content_type is application/json", file=sys.stderr)
+        print(request.json, file=sys.stderr)
+        req_dict = request.json
+
+        print(req_dict, file=sys.stderr)
 
         my_uuid = uuid.uuid4()
 
@@ -35,7 +40,7 @@ def publish():
         csv_columns = ['uuid', 'format', 'stream-identifier', 'description', 'tags']
         req_dict['uuid'] = my_uuid
 
-        file_name = "stream-metadata-" + my_uuid + ".csv"
+        file_name = "stream-metadata-" + str(my_uuid) + ".csv"
         try:
             with open(file_name, 'w') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
@@ -50,6 +55,7 @@ def publish():
             if not websocket_functions.is_port_in_use(i):
                 try:
                     websocket_functions.start_stream(i)
+                    print("SUCCESS")
                     break
                 except Exception as e:
                     print(e)
@@ -59,4 +65,6 @@ def publish():
           "url": "dummy-url"
         })
     else:
-        return 'Content-Type not supported!'
+        return jsonify({
+            "error" : 'Content-Type not supported!'
+        })
