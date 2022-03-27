@@ -11,15 +11,14 @@ import pytest
 def test_hello_world():
     response = app.test_client().get('/')
 
-    print("======")
-    print(response)
-    print("======")
+    # print("======")
+    # print(response)
+    # print("======")
 
-    # data = json.loads(response.get_data(as_text=True))
+    data = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    # print(data)
-    # assert response.data == "<p>Hello, World!</p>"
+    assert data == "<p>Hello, World!</p>"
 
 def test_publish():        
     response = app.test_client().post(
@@ -34,6 +33,8 @@ def test_publish():
         ),
         content_type='application/json',
     )
+
+    assert response is not None
 
     data = json.loads(response.get_data(as_text=True))
 
