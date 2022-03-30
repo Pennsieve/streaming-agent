@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import json
 import uuid
 import csv
+import asyncio
 
 import sys
 import os
@@ -10,6 +11,7 @@ sys.path.append(myDir)
 
 import websocket.websocket_functions as websocket_functions
 
+loop = asyncio.get_event_loop()
 app = Flask(__name__)
 
 @app.route("/")
@@ -54,7 +56,8 @@ def publish():
         for i in list(range(8765, 8775)):
             if not websocket_functions.is_port_in_use(i):
                 try:
-                    websocket_functions.start_stream(i)
+                    task = asyncio.create_task(websocket_functions.start_stream(i))
+                    # loop.run_until_complete(websocket_functions.start_stream(i))
                     print("SUCCESS")
                     break
                 except Exception as e:
