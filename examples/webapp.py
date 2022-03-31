@@ -10,6 +10,11 @@ from flask_sock import Sock
 # Requirements:
 #   - pip install flask-sock (Note this will update Flask to 2.1.1)
 #
+# Notes:
+#   - this implementation is likely not very safe due to:
+#       (1) the use of `data` in the global namespace
+#       (2) potential concurrent read and write access to `data`
+#
 # ----
 
 
@@ -24,7 +29,18 @@ sock = Sock(app)
 # enable CORS
 #CORS(app, resources={r'/*': {'origins': '*'}})
 
+# index: maps user-provided label to stream id
+index = {}
+# streams: keeps track of requests, and publish and subscribe URLs
 streams = {}
+# data: the streams of data
+data = {}
+
+def publish_url(host, id):
+    return f"ws://{host}/publish/{id}"
+
+def subscribe_url(host, id):
+    return f"ws://{host}/subscribe/{id}"
 
 #
 # /publish endpoint
@@ -37,13 +53,16 @@ def publish_post():
     publish_request = request.get_json()
     id = str(uuid.uuid4())
     host = request.host
-    publish_url = f"ws://{host}/publish/{id}"
-    streams[id] = {"request": publish_request,
-                   "url": publish_url,
-                   "data" : []}
+    pub_url = publish_url(host, id)
+    sub_url = subscribe_url(host, id)
+    index[publish_request["label"]] = id
+    streams[id] = {"request": publish_request, 
+                   "publish_url": f"{pub_url}",
+                   "subscribe_url": f"{sub_url}"}
+    data[id] = []
     response_object = {
         'status': 'success',
-        'url': publish_url,
+        'url': pub_url,
         }
     return jsonify(response_object)
 
@@ -55,11 +74,13 @@ def publish_get(id):
 #
 # /publish websocket
 #
+# TODO: handle close of WebSocket from peer (currently this raises a ConnectionError)
+#
 @sock.route('/publish/<id>')
 def ingest(sock, id):
     while True:
-        data = sock.receive()
-        streams[id]['data'].append(data)
+        message = sock.receive()
+        data[id].append(message)
         
 #
 # /dump debugging endpoint 
@@ -67,6 +88,7 @@ def ingest(sock, id):
 @app.route('/dump', methods=['GET'])
 def dump():
     print(streams)
+    print(index)
     response = {}
     return jsonify(response)
 
