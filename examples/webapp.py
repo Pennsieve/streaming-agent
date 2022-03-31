@@ -10,6 +10,9 @@ from flask_sock import Sock
 # Requirements:
 #   - pip install flask-sock (Note this will update Flask to 2.1.1)
 #
+# TODO / Questions:
+#   1. do the WebSockets run asynchronously? do they block further incoming connections?
+#
 # Notes:
 #   - this implementation is likely not very safe due to:
 #       (1) the use of `data` in the global namespace
@@ -62,7 +65,7 @@ def publish_post():
     data[id] = []
     response_object = {
         'status': 'success',
-        'url': pub_url,
+        'url': pub_url
         }
     return jsonify(response_object)
 
@@ -74,14 +77,55 @@ def publish_get(id):
 #
 # /publish websocket
 #
-# TODO: handle close of WebSocket from peer (currently this raises a ConnectionError)
+# TODO: do something in exception handling branch
 #
 @sock.route('/publish/<id>')
-def ingest(sock, id):
-    while True:
-        message = sock.receive()
-        data[id].append(message)
+def ingress(ws, id):
+    try:
+        while True:
+            message = ws.receive()
+            data[id].append(message)
+    except Exception:
+        pass
+    finally:
+        ws.close()
         
+#
+# /subscribe endpoint
+#
+@app.route('/subscribe/<label>', methods=['GET'])
+def subscribe_get(label):
+    response = {}
+    if label in index:
+        id = index[label]
+        sub_url = streams[id]['subscribe_url']
+        response = {
+            'status': 'success',
+            'url': sub_url
+        }
+    else:
+        response = {
+            'status': 'failure',
+            'message': f"unknown label: {label}"
+        }
+    return jsonify(response)
+
+#
+# /subscribe websocket
+#
+# TODO: do something in exception handling branch
+#
+@sock.route('/subscribe/<id>')
+def egress(ws, id):
+    try:
+        for message in data[id]:
+            ws.send(message)
+    except Exception:
+        pass
+    finally:
+        ws.close()
+
+#
 #
 # /dump debugging endpoint 
 #
