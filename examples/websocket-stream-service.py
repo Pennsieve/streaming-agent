@@ -9,44 +9,31 @@ def generator(N):
     for i in range(N):
         yield True
 
+async def StreamingPeer(websocket, peer, protocol):
+    # respond to our peer's greeting
+    response = protocol.process(peer)
+    print(f"send -> {response}")
+    await websocket.send(response)
+
+    # process stream of messages
+    async for message in websocket:
+        print(f"recv <- {message}")
+        response = protocol.process(message)
+        if response is not None:
+            print(f"send -> {response}")
+            await websocket.send(response)
+        else:
+            print(f"closing connection...")
+            await websocket.close()
+
 async def Publisher(websocket, peer):
     source = generator(5)
     protocol = PublisherProtocol(source)
-
-    # respond to our peer's greeting
-    response = protocol.process(peer)
-    print(f"send -> {response}")
-    await websocket.send(response)
-
-    # process stream of messages
-    async for message in websocket:
-        print(f"recv <- {message}")
-        response = protocol.process(message)
-        if response is not None:
-            print(f"send -> {response}")
-            await websocket.send(response)
-        else:
-            print(f"closing connection...")
-            await websocket.close()
+    await StreamingPeer(websocket, peer, protocol)
 
 async def Subscriber(websocket, peer):
     protocol = SubscriberProtocol()
-
-    # respond to our peer's greeting
-    response = protocol.process(peer)
-    print(f"send -> {response}")
-    await websocket.send(response)
-
-    # process stream of messages
-    async for message in websocket:
-        print(f"recv <- {message}")
-        response = protocol.process(message)
-        if response is not None:
-            print(f"send -> {response}")
-            await websocket.send(response)
-        else:
-            print(f"closing connection...")
-            await websocket.close()
+    await StreamingPeer(websocket, peer, protocol)
 
 async def connected(websocket):
     print(f"connected()")
