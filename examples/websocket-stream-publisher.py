@@ -9,7 +9,7 @@ def generator(N):
         yield True
 
 def hello():
-    return "Producer()"
+    return "Publisher()"
 
 def goodbye():
     return "goodbye()"
