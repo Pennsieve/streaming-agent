@@ -4,7 +4,7 @@ class PublisherProtocol():
 
     def process(self, message):
         response = None
-        if message == "connected()":
+        if message == "connected()" or message == "Subscriber()":
             response = "Publisher()"
         elif message == "subscribe()":
             response = "onSubscribe()"
@@ -26,7 +26,9 @@ class SubscriberProtocol():
 
     def process(self, message):
         response = None
-        if message == "Publisher()":
+        if message == "connected()":
+            response = "Subscriber()"
+        elif message == "Publisher()":
             response = "subscribe()"
         elif message == "onSubscribe()" or message == "onNext()":
             response = "request()"
