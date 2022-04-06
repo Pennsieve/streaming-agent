@@ -9,14 +9,7 @@ from datetime import timedelta
 from pyedflib import EdfReader
 from collections import namedtuple
 import pennsieve.timeseries_pb2
-
-class Counter():
-    def __init__(self, start=0):
-        self.counter = start - 1
-
-    def __call__(self):
-        self.counter += 1
-        return self.counter
+from counter import Counter
 
 ChannelInfo = namedtuple("ChannelInfo",['index','label','frequency'])
 
@@ -73,12 +66,15 @@ class EdfFile:
                 yield ingest_segment.SerializeToString()
 
 async def main(endpoint, file):
+    count = 0
     edf = EdfFile(file)
     async with websockets.connect(endpoint) as websocket:
         #await websocket.send(json.dumps(edf.header()))
         for data in edf.stream_protobuf():
+            count += 1
             await websocket.send(data)
         await websocket.close()
+        print(f"sent {count} messages")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--file', type=str)
