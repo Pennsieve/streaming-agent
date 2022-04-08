@@ -30,6 +30,7 @@ class FileSource(Iterator):
 # TODO: create a Subscription. call Subscriber.onSubscribe()
 class FilePublisher(reactivestreams.Publisher):
     def __init__(self, file_path):
+        print("FilePublisher() [construct]")
         self.subscriber = None
         self.subscription = None
         self.source = FileSource(file_path)
@@ -41,7 +42,7 @@ class FilePublisher(reactivestreams.Publisher):
         subscriber.onSubscribe(self.subscription)
 
     def request(self, N):
-        print(f"FilePublisher.request(): {N}")
+        print(f"FilePublisher.request() N: {N}")
         try:
             for i in range(N):
                 self.subscriber.onNext(self.source.next())
@@ -56,6 +57,7 @@ class FilePublisher(reactivestreams.Publisher):
 
 class FileSubscriber(reactivestreams.Subscriber):
     def __init__(self, file_path, buffer_size=10):
+        print("FileSubscriber() [construct]")
         self.active = True
         self.done = False
         self.subscription = None
@@ -101,12 +103,12 @@ class FileSubscriber(reactivestreams.Subscriber):
             self.done = True
 
     def onSubscribe(self, subscription: reactivestreams.Subscription):
-        print(f"FileSubscriber.onSubscribe(): {subscription}")
+        print(f"FileSubscriber.onSubscribe() subscription: {subscription}")
         self.subscription = subscription
         self.async_writer = asyncio.create_task(self.writer(self.file_path), name="FileSubscriber->writer()")
 
     def onNext(self, item):
-        print(f"FileSubscriber.onNext(): {item}")
+        print(f"FileSubscriber.onNext() item: {item}")
         asyncio.create_task(self.enqueue(item), name="FileSubscriber->enqueue()")
 
     def onError(self, error: Exception = None):
@@ -120,6 +122,6 @@ class FileSubscriber(reactivestreams.Subscriber):
 
     async def request(self, N):
         if self.active and self.buffer_space_available(N) and self.outstanding() == 0:
-            print(f"FileSubscriber.request(): {N}")
+            print(f"FileSubscriber.request() N: {N}")
             self.requested += N
             self.subscription.request(N)
