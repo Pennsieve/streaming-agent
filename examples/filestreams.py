@@ -29,11 +29,16 @@ class FileSource(Iterator):
 
 # TODO: create a Subscription. call Subscriber.onSubscribe()
 class FilePublisher(reactivestreams.Publisher):
-    def __init__(self, file_path):
+    def __init__(self, file_path=None, file_source=None):
         print("FilePublisher() [construct]")
         self.subscriber = None
         self.subscription = None
-        self.source = FileSource(file_path)
+        if file_source is not None:
+            self.source = file_source
+        elif file_path is not None:
+            self.source = FileSource(file_path)
+        else:
+            raise ValueError("must provide file_source or file_path")
 
     def subscribe(self, subscriber: reactivestreams.Subscriber):
         print(f"FilePublisher.subscribe() subscriber: {subscriber}")

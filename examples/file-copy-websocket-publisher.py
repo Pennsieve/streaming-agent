@@ -2,12 +2,12 @@
 
 import argparse
 import asyncio
-from filestreams import FilePublisher
+from filestreams import FilePublisher, FileSource
 from proxy import SubscriberProxy
 
 async def main(input, endpoint):
     print("main(): starting...")
-    publisher = FilePublisher(input)
+    publisher = FilePublisher(file_source=FileSource(input))
     subscriber = SubscriberProxy(publisher)
     await subscriber.connect(endpoint)
     print("main(): running/waiting...")
