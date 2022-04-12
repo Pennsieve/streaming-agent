@@ -89,6 +89,9 @@ class KafkaSubscriber(reactivestreams.Subscriber):
             self.completion_task = asyncio.create_task(self.completion_future(), name="KafkaSubscriber->completion_future()")
         return self.completion_task
 
+    def is_done(self):
+        return self.done
+    
     def onSubscribe(self, subscription: Subscription):
         print(f"KafkaSubscriber.onSubscribe() subscription: {subscription}")
         self.subscription = subscription
