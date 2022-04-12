@@ -11,7 +11,7 @@ global_buffer_size = None
 
 # web-socket connection handler
 async def handler(websocket):
-    print("handler(): starting")
+    print(f"handler(): starting [websocket: {websocket}] [type: {type(websocket)}]")
     publisher = PublisherProxy()
     publisher.attach(websocket)
     subscriber = FileSubscriber(global_output, global_buffer_size)

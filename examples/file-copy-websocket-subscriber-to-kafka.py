@@ -12,7 +12,7 @@ global_buffer_size = None
 
 # web-socket connection handler
 async def handler(websocket):
-    print("handler(): starting")
+    print(f"handler(): starting [websocket: {websocket}] [type: {type(websocket)}]")
     publisher = PublisherProxy()
     publisher.attach(websocket)
     subscriber = KafkaSubscriber(global_topic, broker=global_broker, buffer_size=global_buffer_size)
