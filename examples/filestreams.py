@@ -1,10 +1,10 @@
 from collections.abc import Iterator
-from enum import Enum
 import reactivestreams
-from counter import Counter
 import asyncio
-from asyncio.queues import Queue, QueueEmpty
 from subscription import Subscription
+from queue import Queue, Empty
+from threading import Thread, Event
+import time
 
 class FileSource(Iterator):
     def __init__(self, file_path):
@@ -27,7 +27,11 @@ class FileSource(Iterator):
     def next(self):
         return next(self.generator)
 
-# TODO: create a Subscription. call Subscriber.onSubscribe()
+#
+# REFACTOR: FilePublisher
+# - decouple request() and calling sunscriber.onNext() 
+# - make delivery of items to subscriber asynchronous
+#
 class FilePublisher(reactivestreams.Publisher):
     def __init__(self, file_path=None, file_source=None):
         print("FilePublisher() [construct]")
@@ -60,18 +64,36 @@ class FilePublisher(reactivestreams.Publisher):
         finally:
             pass
 
+#
+# REFACTOR: FileSubscriber
+# - replace use of async/await with Threads
+#
+# [√] 1. remove loop (in constructor, and as an attribute)
+# [√] 2. remove from asyncio.queues import Queue, QueueEmpty
+# [√] 3. add import queue, change Queue type
+# [-] 4. re-think completion (completion task, completion_future, notify)
+# [√] 5. writer becomes a Thread: started when onSubscribe() is called
+# [√] 6. remove async/await from enqueue() and dequeue()
+# [√] 7. dequeue() needs optional timeout parameter with default = 0
+# [√] 8. request becomes a Thread: started on FileSubscriber construction
+# [√] 9. how do we signal request to execute? threading.Event
+
 class FileSubscriber(reactivestreams.Subscriber):
     def __init__(self, file_path, buffer_size=10):
-        print("FileSubscriber() [construct]")
+        print(f"FileSubscriber() [construct] file_path: {file_path} buffer_size: {buffer_size}")
         self.active = True
         self.done = False
         self.subscription = None
         self.file_path = file_path
         self.buffer_size = buffer_size
-        self.queue = Queue(self.buffer_size)
+        self.queue = Queue(maxsize=buffer_size)
         self.requested = 0
         self.received = 0
-        self.completion_task = None
+        #self.completion_task = None
+        self.event = Event()
+        self.writer_thread = None
+        self.request_thread = Thread(target=self.request, args=(self.buffer_size, self.event), name="FileSubscriber.request()")
+        self.request_thread.start()
 
     def buffer_space_available(self, N):
         return N <= (self.queue.maxsize - self.queue.qsize())
@@ -79,42 +101,44 @@ class FileSubscriber(reactivestreams.Subscriber):
     def outstanding(self):
         return self.requested - self.received
 
-    async def enqueue(self, item):
-        await self.queue.put(item)
+    def enqueue(self, item):
+        self.queue.put(item)
 
-    async def dequeue(self):
+    def dequeue(self, timeout=0):
         return self.queue.get_nowait()
 
-    async def completion_future(self):
-        while self.done is False:
-            await asyncio.sleep(0.01)
+    #async def completion_future(self):
+    #    while self.done is False:
+    #        await asyncio.sleep(0.01)
+    #
+    #def notify(self):
+    #    if self.completion_task is None:
+    #        self.completion_task = self.loop.create_task(self.completion_future(), name="FileSubscriber->completion_future()")
+    #    return self.completion_task
 
-    def notify(self):
-        if self.completion_task is None:
-            self.completion_task = asyncio.create_task(self.completion_future(), name="FileSubscriber->completion_future()")
-        return self.completion_task
-
-    async def writer(self, file_path):
+    def writer(self, file_path, event):
+        print(f"FileSubscriber.writer() [starting] file_path: {file_path} event: {event}")
         with open(file_path, "w") as file:
             while self.active or self.queue.qsize() > 0:
-                asyncio.create_task(self.request(self.buffer_size), name="FileSubscriber->request()")
+                event.set()
                 try:
-                    item = await self.dequeue()
+                    item = self.dequeue()
                     self.received += 1
                     print(f"write(): {item}")
                     file.write(f"{item}\n")
-                except QueueEmpty as e:
-                    await asyncio.sleep(0.001)
+                except Empty:
+                    time.sleep(0.001)
             self.done = True
 
     def onSubscribe(self, subscription: reactivestreams.Subscription):
         print(f"FileSubscriber.onSubscribe() subscription: {subscription}")
         self.subscription = subscription
-        self.async_writer = asyncio.create_task(self.writer(self.file_path), name="FileSubscriber->writer()")
+        self.writer_thread = Thread(target=self.writer, args=(self.file_path, self.event), name="FileSubscriber.writer()")
+        self.writer_thread.start()
 
     def onNext(self, item):
         print(f"FileSubscriber.onNext() item: {item}")
-        asyncio.create_task(self.enqueue(item), name="FileSubscriber->enqueue()")
+        self.enqueue(item)
 
     def onError(self, error: Exception = None):
         print(f"FileSubscriber.onError() error: {error}")
@@ -125,8 +149,12 @@ class FileSubscriber(reactivestreams.Subscriber):
         print(f"FileSubscriber.onComplete()")
         self.active = False
 
-    async def request(self, N):
-        if self.active and self.buffer_space_available(N) and self.outstanding() == 0:
-            print(f"FileSubscriber.request() N: {N}")
-            self.requested += N
-            self.subscription.request(N)
+    def request(self, N, event):
+        print(f"FileSubscriber.request() [starting] N: {N} event: {event}")
+        while True:
+            event.wait()
+            if self.active and self.buffer_space_available(N) and self.outstanding() == 0:
+                print(f"FileSubscriber.request() N: {N}")
+                self.requested += N
+                self.subscription.request(N)
+            event.clear()
