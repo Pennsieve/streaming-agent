@@ -3,6 +3,7 @@
 import argparse
 import uuid
 import json
+import time
 import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -57,6 +58,9 @@ def subscribe_url(host, id):
 
 def stream_details(stream_id):
     return STREAMS.get(stream_id, {})
+
+def current_time():
+    return time.strftime('%Y-%m-%d %H:%M:%S')
 
 #
 # state management (load/store using files)
@@ -237,7 +241,9 @@ def streams():
 @app.route('/publish/<stream_id>', websocket=True)
 def publish_stream(stream_id):
     ws = simple_websocket.Server(request.environ)
-    logging.info(f"web-service.publish_stream() ws: {ws} [type: {type(ws)}] stream_id: {stream_id}")
+    connection_message = f"{current_time()} - web-service.publish_stream() START stream_id: {stream_id}"
+    print(connection_message)
+    logging.info(connection_message)
     topic = f"pennsieve.timeseries.{stream_id}"
     
     try:
@@ -249,7 +255,7 @@ def publish_stream(stream_id):
         logging.debug("web-service.publish_stream() starting receive loop...")
         STREAMS[stream_id]['active'] = True
         store_state(INDEX, STREAMS)
-        while True:
+        while subscriber.complete() == False:
             message = ws.receive(timeout=1)
             if message is not None:
                 count += 1
@@ -258,7 +264,9 @@ def publish_stream(stream_id):
     except simple_websocket.ConnectionClosed:
         logging.info("web-service.publish_stream() exception: simple_websocket.ConnectionClosed")
     finally:
-        logging.info(f"received {count} messages")
+        completion_message = f"{current_time()} - web-service.publish_stream() FINISH stream_id: {stream_id} received {count} messages"
+        print(completion_message)
+        logging.info(completion_message)
         ws.close()
     
     STREAMS[stream_id]['active'] = False
