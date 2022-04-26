@@ -2,6 +2,7 @@
 
 import argparse
 import uuid
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from decoupled import PublisherProxy
@@ -57,17 +58,45 @@ def stream_details(stream_id):
     return STREAMS.get(stream_id, {})
 
 #
+# state management (load/store using files)
+#
+def load_state():
+    index = {}
+    streams = {}
+    try:
+        with open('streams.json', 'r') as fp:
+            streams = json.load(fp)
+        with open('index.json', 'r') as fp:
+            index = json.load(fp)
+    except Exception as e:
+        print(f"load_state() WARNING - Exception: {e}")
+    return index, streams
+
+def store_state(index, streams):
+    try:
+        with open('streams.json', 'w') as fp:
+            json.dump(streams, fp)
+        with open('index.json', 'w') as fp:
+            json.dump(index, fp)
+    except Exception as e:
+        print(f"store_state() WARNING - Exception: {e}")
+
+#
 # /stream endpoint
 #   GET:   return one stream by stream id (or label)
 #
 @app.route('/stream/<stream_id>', methods=['GET'])
 def stream_get(stream_id):
-    result = {}
+    response_object = {
+        'status': 'success'
+        }
     if stream_id in STREAMS:
-        result = stream_details(stream_id)
+        response_object['stream'] = stream_details(stream_id)
     elif stream_id in INDEX:
-        result = stream_details(INDEX[stream_id])
-    return jsonify(result)
+        response_object['stream'] = stream_details(INDEX[stream_id])
+    else:
+        response_object['message'] = 'stream not found'
+    return jsonify(response_object)
 
 
 #
@@ -108,11 +137,16 @@ def stream_post():
         'publish_url': f"{pub_url}",
         'subscribe_url': f"{sub_url}"
         }
-    response_object = {
+    
+    # save state
+    store_state(INDEX, STREAMS)
+    
+    return jsonify({
         'status': 'success',
-        'url': pub_url
-        }
-    return jsonify(response_object)
+        'message': 'stream created',
+        'publish_url': pub_url,
+        'subscribe_url': sub_url
+        })
 
 #
 # /stream endpoint
@@ -136,12 +170,21 @@ def stream_put(stream_id):
         description = post_data.get('description')
         if description is not None:
             STREAMS[stream_id]['description'] = description
-        response_object = {
-            'status': 'success'
-            }
-        return jsonify(response_object)
+        
+        # save state
+        store_state(INDEX, STREAMS)
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'stream updated',
+            'publish_url': STREAMS[stream_id]['publish_url'],
+            'subscribe_url': STREAMS[stream_id]['subscribe_url']
+            })
     else:
-        return jsonify('{}')
+        return jsonify({
+            'status': 'success',
+            'message': 'stream not found'
+            })
 
 #
 # /stream endpoint
@@ -151,19 +194,25 @@ def stream_put(stream_id):
 #
 @app.route('/stream', methods=['DELETE'])
 def stream_delete():
-    response_object = {}
+    response_object = {
+        'status': 'success'
+        }
     delete_request = request.get_json()
-    print(f"delete_request: {delete_request}")
     stream_id = delete_request.get('stream_id')
-    print(f"stream_id: {stream_id}")
     if stream_id is not None:
-        response_object['status'] = 'success'
-        if stream_id in INDEX:
-            del INDEX[stream_id]
         if stream_id in STREAMS:
+            label = STREAMS[stream_id]['label']
+            del INDEX[label]
             del STREAMS[stream_id]
+            response_object['message'] = 'stream deleted'
+        else:
+            response_object['message'] = 'stream not found'
     else:
-        response_object['status'] = 'success'
+        response_object['message'] = 'stream_id not provided'
+    
+    # save state
+    store_state(INDEX, STREAMS)
+    
     return jsonify(response_object)
 
 
@@ -198,6 +247,7 @@ def publish_stream(stream_id):
         publisher.subscribe(subscriber)
         print("web-service.publish_stream() starting receive loop...")
         STREAMS[stream_id]['active'] = True
+        store_state(INDEX, STREAMS)
         while True:
             message = ws.receive(timeout=1)
             if message is not None:
@@ -211,7 +261,12 @@ def publish_stream(stream_id):
         ws.close()
     
     STREAMS[stream_id]['active'] = False
-    return '{}'
+    store_state(INDEX, STREAMS)
+    
+    return jsonify({
+        'status': 'success',
+        'message': 'stream publishing complete'
+        })
 
 #
 # /subscribe endpoint
@@ -275,12 +330,20 @@ def ping_pong():
         })
 
 
+# parse command line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--host', type=str, default="localhost")
 parser.add_argument('--port', type=int, default=5678)
 parser.add_argument('--broker', type=str, default="localhost:9092")
 parser.add_argument('--buffer-size', type=int, default=10)
 args = parser.parse_args()
+
+# set some parameters
 global_broker = args.broker
 global_buffer_size = args.buffer_size
+
+# load state
+INDEX, STREAMS = load_state()
+
+# run the web service
 app.run(host=args.host, port=args.port)
