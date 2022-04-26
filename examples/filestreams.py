@@ -77,7 +77,12 @@ class FilePublisher(reactivestreams.Publisher):
 # [√] 7. dequeue() needs optional timeout parameter with default = 0
 # [√] 8. request becomes a Thread: started on FileSubscriber construction
 # [√] 9. how do we signal request to execute? threading.Event
-
+#
+# REFACTOR: queue handling
+# 1. make queue size buffer_size + a small amount
+# 2. block on enqueue() - with a timeout? how will we handle Full exception?
+# 3. don't block on dequeue(), but permit a timeout?
+#
 class FileSubscriber(reactivestreams.Subscriber):
     def __init__(self, file_path, buffer_size=10):
         print(f"FileSubscriber() [construct] file_path: {file_path} buffer_size: {buffer_size}")
