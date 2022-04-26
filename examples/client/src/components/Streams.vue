@@ -187,7 +187,11 @@
                <col span="1" style="width: 75%;">
             </colgroup>
             <tbody>
-                <tr><td><b>{{pubsubForm.action}} URL: </b></td><td>{{pubsubForm.url}}</td></tr>
+                <tr>
+                    <td><b>{{pubsubForm.action}} URL: </b></td>
+                    <td>{{pubsubForm.url}}</td>
+                    <td><b-button @click="copyToClipboard(pubsubForm.url)">copy</b-button></td>
+                </tr>
             </tbody>
         </table>
         <br><br>
@@ -404,6 +408,10 @@ export default {
     onPubSubOK() {
       this.$refs.pubsubStreamModal.hide();
       this.initForm();
+    },
+
+    copyToClipboard(text) {
+      navigator.clipboard.writeText(text);
     },
   },
 
