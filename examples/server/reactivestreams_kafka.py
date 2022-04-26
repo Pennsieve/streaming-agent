@@ -70,6 +70,9 @@ class KafkaSubscriber(reactivestreams.Subscriber):
         self.request_thread = Thread(target=self.request, args=(self.buffer_size, self.event), name="KafkaSubscriber.request()")
         self.request_thread.start()
 
+    def complete(self):
+        return self.active == False and self.done == True
+    
     def buffer_space_available(self, N):
         return N <= (self.queue.maxsize - self.queue.qsize())
 
