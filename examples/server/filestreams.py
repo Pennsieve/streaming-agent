@@ -5,6 +5,7 @@ from subscription import Subscription
 from queue import Queue, Empty
 from threading import Thread, Event
 import time
+import logging
 
 class FileSource(Iterator):
     def __init__(self, file_path):
@@ -34,7 +35,7 @@ class FileSource(Iterator):
 #
 class FilePublisher(reactivestreams.Publisher):
     def __init__(self, file_path=None, file_source=None):
-        print("FilePublisher() [construct]")
+        logging.debug("FilePublisher() [construct]")
         self.subscriber = None
         self.subscription = None
         if file_source is not None:
@@ -45,17 +46,17 @@ class FilePublisher(reactivestreams.Publisher):
             raise ValueError("must provide file_source or file_path")
 
     def subscribe(self, subscriber: reactivestreams.Subscriber):
-        print(f"FilePublisher.subscribe() subscriber: {subscriber}")
+        logging.debug(f"FilePublisher.subscribe() subscriber: {subscriber}")
         self.subscriber = subscriber
         self.subscription = Subscription(self, subscriber)
         subscriber.onSubscribe(self.subscription)
 
     def request(self, N):
-        print(f"FilePublisher.request() N: {N}")
+        logging.debug(f"FilePublisher.request() N: {N}")
         try:
             for i in range(N):
                 self.subscriber.onNext(self.source.next())
-        except StopIteration as e:
+        except StopIteration:
             self.subscriber.onComplete()
         except Exception as e:
             self.subscriber.onError(e)
@@ -85,7 +86,7 @@ class FilePublisher(reactivestreams.Publisher):
 #
 class FileSubscriber(reactivestreams.Subscriber):
     def __init__(self, file_path, buffer_size=10):
-        print(f"FileSubscriber() [construct] file_path: {file_path} buffer_size: {buffer_size}")
+        logging.debug(f"FileSubscriber() [construct] file_path: {file_path} buffer_size: {buffer_size}")
         self.active = True
         self.done = False
         self.subscription = None
@@ -122,44 +123,44 @@ class FileSubscriber(reactivestreams.Subscriber):
     #    return self.completion_task
 
     def writer(self, file_path, event):
-        print(f"FileSubscriber.writer() [starting] file_path: {file_path} event: {event}")
+        logging.debug(f"FileSubscriber.writer() [starting] file_path: {file_path} event: {event}")
         with open(file_path, "w") as file:
             while self.active or self.queue.qsize() > 0:
                 event.set()
                 try:
                     item = self.dequeue()
                     self.received += 1
-                    print(f"write(): {item}")
+                    logging.debug(f"write(): {item}")
                     file.write(f"{item}\n")
                 except Empty:
                     time.sleep(0.001)
             self.done = True
 
     def onSubscribe(self, subscription: reactivestreams.Subscription):
-        print(f"FileSubscriber.onSubscribe() subscription: {subscription}")
+        logging.debug(f"FileSubscriber.onSubscribe() subscription: {subscription}")
         self.subscription = subscription
         self.writer_thread = Thread(target=self.writer, args=(self.file_path, self.event), name="FileSubscriber.writer()")
         self.writer_thread.start()
 
     def onNext(self, item):
-        print(f"FileSubscriber.onNext() item: {item}")
+        logging.debug(f"FileSubscriber.onNext() item: {item}")
         self.enqueue(item)
 
     def onError(self, error: Exception = None):
-        print(f"FileSubscriber.onError() error: {error}")
+        logging.debug(f"FileSubscriber.onError() error: {error}")
         self.subscription.cancel()
         self.active = False
 
     def onComplete(self):
-        print(f"FileSubscriber.onComplete()")
+        logging.debug("FileSubscriber.onComplete()")
         self.active = False
 
     def request(self, N, event):
-        print(f"FileSubscriber.request() [starting] N: {N} event: {event}")
+        logging.debug(f"FileSubscriber.request() [starting] N: {N} event: {event}")
         while True:
             event.wait()
             if self.active and self.buffer_space_available(N) and self.outstanding() == 0:
-                print(f"FileSubscriber.request() N: {N}")
+                logging.debug(f"FileSubscriber.request() N: {N}")
                 self.requested += N
                 self.subscription.request(N)
             event.clear()

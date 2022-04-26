@@ -3,6 +3,7 @@
 import argparse
 import uuid
 import json
+import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from proxy import PublisherProxy
@@ -69,7 +70,7 @@ def load_state():
         with open('index.json', 'r') as fp:
             index = json.load(fp)
     except Exception as e:
-        print(f"load_state() WARNING - Exception: {e}")
+        logging.warn(f"load_state() WARNING - Exception: {e}")
     return index, streams
 
 def store_state(index, streams):
@@ -79,7 +80,7 @@ def store_state(index, streams):
         with open('index.json', 'w') as fp:
             json.dump(index, fp)
     except Exception as e:
-        print(f"store_state() WARNING - Exception: {e}")
+        logging.warn(f"store_state() WARNING - Exception: {e}")
 
 #
 # /stream endpoint
@@ -236,7 +237,7 @@ def streams():
 @app.route('/publish/<stream_id>', websocket=True)
 def publish_stream(stream_id):
     ws = simple_websocket.Server(request.environ)
-    print(f"web-service.publish_stream() ws: {ws} [type: {type(ws)}] stream_id: {stream_id}")
+    logging.info(f"web-service.publish_stream() ws: {ws} [type: {type(ws)}] stream_id: {stream_id}")
     topic = f"pennsieve.timeseries.{stream_id}"
     
     try:
@@ -245,19 +246,19 @@ def publish_stream(stream_id):
         publisher = PublisherProxy(messenger=messenger, synchronize=True)
         subscriber = KafkaSubscriber(topic=topic, broker=global_broker, buffer_size=global_buffer_size)
         publisher.subscribe(subscriber)
-        print("web-service.publish_stream() starting receive loop...")
+        logging.debug("web-service.publish_stream() starting receive loop...")
         STREAMS[stream_id]['active'] = True
         store_state(INDEX, STREAMS)
         while True:
             message = ws.receive(timeout=1)
             if message is not None:
                 count += 1
-                print(f"web-service.publish_stream() ws.receive({count}) message: {message}")
+                logging.debug(f"web-service.publish_stream() ws.receive({count}) message: {message}")
                 publisher.event(message)
     except simple_websocket.ConnectionClosed:
-        print("web-service.publish_stream() exception: simple_websocket.ConnectionClosed")
+        logging.info("web-service.publish_stream() exception: simple_websocket.ConnectionClosed")
     finally:
-        print(f"received {count} messages")
+        logging.info(f"received {count} messages")
         ws.close()
     
     STREAMS[stream_id]['active'] = False
@@ -314,16 +315,14 @@ def publish_stream(stream_id):
 @app.route('/dump/<item>', methods=['GET'])
 def dump(item):
     if item == "index":
-        print(f"INDEX:\n{INDEX}")
         return jsonify(INDEX)
     elif item == "streams":
-        print(f"STREAMS:\n{STREAMS}")
         return jsonify(STREAMS)
 
 
 # health check route
 @app.route('/health', methods=['GET'])
-def ping_pong():
+def health_check():
     return jsonify({
         'status': 'success',
         'health': 'OK'
@@ -336,7 +335,14 @@ parser.add_argument('--host', type=str, default="localhost")
 parser.add_argument('--port', type=int, default=5678)
 parser.add_argument('--broker', type=str, default="localhost:9092")
 parser.add_argument('--buffer-size', type=int, default=10)
+parser.add_argument('--log-file', type=str, default='server.log')
+parser.add_argument('--log-level', type=str, default='DEBUG')
 args = parser.parse_args()
+
+# initialize logging
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', 
+                    filename=args.log_file,
+                    level=getattr(logging, args.log_level.upper()))
 
 # set some parameters
 global_broker = args.broker
@@ -346,4 +352,5 @@ global_buffer_size = args.buffer_size
 INDEX, STREAMS = load_state()
 
 # run the web service
+logging.info(f"web-service starting host: {args.host} port: {args.port}")
 app.run(host=args.host, port=args.port)

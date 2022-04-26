@@ -1,3 +1,4 @@
+import logging
 import reactivestreams
 from subscription import Subscription
 from kafka import KafkaProducer, KafkaConsumer
@@ -16,18 +17,18 @@ class KafkaPublisher(reactivestreams.Publisher):
     # Destination: a reactivestreams.Subscriber
 
     def __init__(self, topic, broker="localhost:9092"):
-        print(f"KafkaPublisher() [construct]")
+        logging.debug("KafkaPublisher() [construct]")
         self.broker = broker
         self.topic = topic
         self.consumer = KafkaConsumer(self.topic, bootstrap_servers = self.broker)
 
     def subscribe(self, subscriber: reactivestreams.Subscriber):
-        print(f"KafkaPublisher.subscribe() subscriber: {subscriber}")
+        logging.debug(f"KafkaPublisher.subscribe() subscriber: {subscriber}")
         self.subscriber = subscriber
         self.subscriber.onSubscribe(Subscription(self, self.subscriber))
 
     def request(self, N):
-        print(f"KafkaPublisher.request() N: {N}")
+        logging.debug(f"KafkaPublisher.request() N: {N}")
         for i in range(N):
             message = next(self.consumer)
             self.subscriber.onNext(message)
@@ -53,7 +54,7 @@ class KafkaSubscriber(reactivestreams.Subscriber):
     # Destination: a Kafka topic (as a Kafka Producer)
 
     def __init__(self, topic, broker="localhost:9092", buffer_size=50):
-        print(f"KafkaSubscriber() [construct] topic: {topic} broker: {broker} buffer_size: {buffer_size}")
+        logging.debug(f"KafkaSubscriber() [construct] topic: {topic} broker: {broker} buffer_size: {buffer_size}")
         self.active = True
         self.broker = broker
         self.topic = topic
@@ -76,19 +77,19 @@ class KafkaSubscriber(reactivestreams.Subscriber):
         return self.requested - self.received
 
     def enqueue(self, item):
-        print(f"KafkaSubscriber.enqueue() item: {item}")
+        logging.debug(f"KafkaSubscriber.enqueue() item: {item}")
         self.queue.put(item)
 
     def dequeue(self):
         return self.queue.get_nowait()
 
     def writer(self, topic, event):
-        print(f"KafkaSubscriber.writer() [starting] topic: {topic} event: {event}")
+        logging.debug(f"KafkaSubscriber.writer() [starting] topic: {topic} event: {event}")
         while self.active or self.queue.qsize() > 0:
             event.set()
             try:
                 item = self.dequeue()
-                print(f"KafkaSubscriber.writer() item: {item}")
+                logging.debug(f"KafkaSubscriber.writer() item: {item}")
                 self.received += 1
                 if type(item) == bytes:
                     self.producer.send(topic, item)
@@ -100,11 +101,11 @@ class KafkaSubscriber(reactivestreams.Subscriber):
         self.done = True
 
     def request(self, N, event):
-        print(f"KafkaSubscriber.request() [starting] N: {N} event: {event}")
+        logging.debug(f"KafkaSubscriber.request() [starting] N: {N} event: {event}")
         while True:
             event.wait()
             if self.active and self.buffer_space_available(N) and self.outstanding() == 0:
-                print(f"KafkaSubscriber.request() N: {N}")
+                logging.debug(f"KafkaSubscriber.request() N: {N}")
                 self.requested += N
                 self.subscription.request(N)
             event.clear()
@@ -122,20 +123,20 @@ class KafkaSubscriber(reactivestreams.Subscriber):
     #    return self.done
     
     def onSubscribe(self, subscription: Subscription):
-        print(f"KafkaSubscriber.onSubscribe() subscription: {subscription}")
+        logging.debug(f"KafkaSubscriber.onSubscribe() subscription: {subscription}")
         self.subscription = subscription
         self.writer_thread = Thread(target=self.writer, args=(self.topic, self.event), name="KafkaSubscriber.writer()")
         self.writer_thread.start()
 
     def onNext(self, item):
-        print(f"KafkaSubscriber.onNext() item: {item}")
+        logging.debug(f"KafkaSubscriber.onNext() item: {item}")
         self.enqueue(item)
 
     def onError(self, error: Exception):
-        print(f"KafkaSubscriber.onError() error: {error}")
+        logging.debug(f"KafkaSubscriber.onError() error: {error}")
         self.subscription.cancel()
         self.active = False
 
     def onComplete(self):
-        print(f"KafkaSubscriber.onComplete()")
+        logging.debug("KafkaSubscriber.onComplete()")
         self.active = False
