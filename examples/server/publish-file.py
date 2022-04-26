@@ -4,7 +4,7 @@ import argparse
 import simple_websocket
 from filestreams import FilePublisher, FileSource
 from edfstreams import EdfFileSource
-from decoupled import SubscriberProxy
+from proxy import SubscriberProxy
 from wsm import WebSocketMessenger
 
 def file_source(file_path, file_format):

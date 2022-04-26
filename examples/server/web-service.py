@@ -5,7 +5,7 @@ import uuid
 import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from decoupled import PublisherProxy
+from proxy import PublisherProxy
 from reactivestreams_kafka import KafkaSubscriber
 from wsm import WebSocketMessenger
 import simple_websocket
