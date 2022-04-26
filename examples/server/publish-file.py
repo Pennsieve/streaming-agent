@@ -28,7 +28,9 @@ def main(file_path, file_format, endpoint):
             count += 1
             logging.debug(f"main() ws.receive({count}) message: {message}")
             subscriber.event(message)
-    except (KeyboardInterrupt, EOFError, simple_websocket.ConnectionClosed):
+    except (simple_websocket.ConnectionClosed, simple_websocket.ws.ConnectionClosed):
+        pass
+    except (KeyboardInterrupt, EOFError):
         ws.close()
 
 parser = argparse.ArgumentParser()
